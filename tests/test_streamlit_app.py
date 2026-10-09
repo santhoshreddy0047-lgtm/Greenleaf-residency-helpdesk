@@ -94,7 +94,7 @@ def test_custom_question_submit():
     text_input = at.text_input(key="chat_input_text")
     text_input.input("What are the gym timings?")
 
-    submit_btn = [b for b in at.button if b.label == "Ask Helpdesk"][0]
+    submit_btn = [b for b in at.button if b.label == "➤"][0]
     submit_btn.click()
     at.run()
 

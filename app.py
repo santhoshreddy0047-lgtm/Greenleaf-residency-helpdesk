@@ -331,7 +331,11 @@ st.markdown(
         border: none !important;
         border-radius: 9999px !important;
         box-shadow: 0 0 16px rgba(0, 229, 153, 0.3) !important;
-        padding: 0.5rem 1.25rem !important;
+        width: 44px !important;
+        min-width: 44px !important;
+        height: 44px !important;
+        padding: 0 !important;
+        font-size: 1.1rem !important;
     }
     [data-testid="stForm"] button[kind="primary"]:hover {
         box-shadow: 0 0 24px rgba(0, 229, 153, 0.5) !important;
@@ -605,9 +609,9 @@ with st.form("helpdesk_chat_form", clear_on_submit=True):
         )
     with form_cols[2]:
         submit_btn = st.form_submit_button(
-            "Ask Helpdesk",
-            use_container_width=True,
+            "➤",
             type="primary",
+            help="Submit question",
         )
 
     if submit_btn:
