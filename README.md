@@ -4,6 +4,10 @@ A Retrieval-Augmented Generation (RAG) application that answers residents' quest
 
 The application retrieves relevant document chunks, generates answers using the Groq API, and displays supporting sources through a Streamlit interface.
 
+## Application Screenshot
+
+![GreenLeaf Residency Helpdesk](screenshots/greenleaf-helpdesk.png)
+
 ## Features
 
 - PDF, DOCX, Markdown, and TXT document ingestion
