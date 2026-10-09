@@ -1,0 +1,38 @@
+# Environment variables and secrets
+.env
+.env.*
+
+# Python virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Local vector database
+qdrant_data/
+
+# Generated processed data
+data/processed/
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE settings
+.vscode/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+
+# Confidential resident information
+data/raw/Helpdesk_Complaint_Log_Oct2025-Jan2026.txt
+
+# Society source documents - keep local unless approved for publication
+data/raw/
+data/updates/
