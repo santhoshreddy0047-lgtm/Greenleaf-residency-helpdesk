@@ -105,10 +105,53 @@ def test_custom_question_submit():
     print("PASS: test_custom_question_submit")
 
 
+def test_supporting_sources_rendered_as_html_cards():
+    """Validates that supporting sources render as styled HTML cards without raw HTML or code blocks."""
+    import markdown_it
+    at = AppTest.from_file(APP_PATH, default_timeout=35)
+    at.session_state.current_question = "What are the rules?"
+    at.session_state.answer_result = {
+        "answer": "Here are the rules.",
+        "sources": [
+            {
+                "source": "AGM_Minutes_2025-05-25.docx",
+                "page": 2,
+                "section": "Rules",
+                "effective_date": "2025-05-25",
+            }
+        ],
+    }
+    at.run()
+    assert not at.exception
+
+    # Find the markdown component containing the answer card
+    answer_card_md = None
+    for m in at.markdown:
+        if '<div class="gl-answer-card">' in m.value:
+            answer_card_md = m.value
+            break
+
+    assert answer_card_md is not None, "Answer card markdown should be found"
+    assert "gl-source-item" in answer_card_md
+    assert "AGM_Minutes_2025-05-25.docx" in answer_card_md
+    assert "Page 2" in answer_card_md
+    assert "Section: Rules" in answer_card_md
+    assert "Effective: 2025-05-25" in answer_card_md
+
+    # Ensure markdown-it rendering does NOT turn it into <pre><code> (raw literal code block)
+    md = markdown_it.MarkdownIt()
+    rendered = md.render(answer_card_md)
+    assert "<pre>" not in rendered, "Supporting sources should not be wrapped in <pre> code blocks"
+    assert "<code>" not in rendered, "Supporting sources should not be wrapped in <code> code blocks"
+    assert '<div class="gl-source-item">' in rendered
+    print("PASS: test_supporting_sources_rendered_as_html_cards")
+
+
 if __name__ == "__main__":
     print("Running Streamlit automated AppTests...")
     test_initial_render()
     test_new_question_clears_answer()
+    test_supporting_sources_rendered_as_html_cards()
     test_quick_question_pool_timings()
     test_quick_question_maintenance()
     test_custom_question_submit()

@@ -1,3 +1,4 @@
+import html
 import os
 from datetime import datetime
 from pathlib import Path
@@ -694,38 +695,42 @@ if st.session_state.current_question and st.session_state.answer_result:
     sources = result.get("sources", [])
     sources_html = ""
     if sources:
-        sources_items = ""
+        sources_items = []
         for src in sources:
-            source_file = src.get("source", "Unknown")
-            sec = src.get("section", "General")
-            page_num = src.get("page", 1)
+            source_file = html.escape(str(src.get("source", "Unknown")))
+            sec = html.escape(str(src.get("section", "General")))
+            page_num = html.escape(str(src.get("page", 1)))
             eff_date = src.get("effective_date")
-            eff_badge = f'<span class="gl-source-badge">Effective: {eff_date}</span>' if eff_date else ""
+            eff_badge = (
+                f'<span class="gl-source-badge">Effective: {html.escape(str(eff_date))}</span>'
+                if eff_date
+                else ""
+            )
 
-            sources_items += f"""
-            <div class="gl-source-item">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00e599" stroke-width="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                </svg>
-                <strong style="color: #ffffff;">{source_file}</strong>
-                <span class="gl-source-badge">Page {page_num}</span>
-                <span class="gl-source-badge">Section: {sec}</span>
-                {eff_badge}
-            </div>
-            """
-        sources_html = f"""
-        <div class="gl-sources-box">
-            <div class="gl-sources-header">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00e599" stroke-width="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                </svg>
-                <span>Verified Supporting Sources</span>
-            </div>
-            {sources_items}
-        </div>
-        """
+            sources_items.append(
+                f'<div class="gl-source-item">'
+                f'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00e599" stroke-width="2">'
+                f'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>'
+                f'<polyline points="14 2 14 8 20 8"></polyline>'
+                f'</svg>'
+                f'<strong style="color: #ffffff;">{source_file}</strong>'
+                f'<span class="gl-source-badge">Page {page_num}</span>'
+                f'<span class="gl-source-badge">Section: {sec}</span>'
+                f'{eff_badge}'
+                f'</div>'
+            )
+        sources_html = (
+            f'<div class="gl-sources-box">'
+            f'<div class="gl-sources-header">'
+            f'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00e599" stroke-width="2">'
+            f'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>'
+            f'<polyline points="14 2 14 8 20 8"></polyline>'
+            f'</svg>'
+            f'<span>Verified Supporting Sources</span>'
+            f'</div>'
+            f'{"".join(sources_items)}'
+            f'</div>'
+        )
 
     st.markdown(
         f"""
@@ -756,8 +761,7 @@ if st.session_state.current_question and st.session_state.answer_result:
                 <div class="gl-bot-bubble">
                     <div class="gl-bot-title">Answer</div>
                     <div>{formatted_ans}</div>
-                    <div class="gl-bot-timestamp">{ts}</div>
-                    {sources_html}
+                    <div class="gl-bot-timestamp">{ts}</div>{sources_html}
                 </div>
             </div>
         </div>
