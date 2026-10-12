@@ -4,6 +4,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
+from textwrap import dedent
 
 try:
     from zoneinfo import ZoneInfo
@@ -473,9 +474,8 @@ st.markdown(
     .st-key-helpdesk-chat-experience {
         box-sizing: border-box;
         display: flex;
-        flex: 1 1 auto;
+        flex: 1 1 0;
         flex-direction: column;
-        height: 100%;
         min-height: 0;
         gap: 0.45rem;
         overflow: hidden;
@@ -595,7 +595,7 @@ st.markdown(
         border-radius: 9999px !important;
         padding: 3px 8px 3px 10px !important;
         box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45) !important;
-        transition: all 0.25s ease !important;
+        transition: border-color 0.25s ease, box-shadow 0.25s ease !important;
         margin: 0.2rem 0 0 !important;
     }
     .st-key-helpdesk-chat-composer [data-testid="stForm"]:focus-within {
@@ -1387,7 +1387,12 @@ def render_history_card(turn):
             else ""
         )
         sources.append(
-            f'<div class="gl-source-item"><strong>{source_name}</strong>'
+            f'<div class="gl-source-item">'
+            f'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00e599" stroke-width="2">'
+            f'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>'
+            f'<polyline points="14 2 14 8 20 8"></polyline>'
+            f'</svg>'
+            f'<strong style="color: #ffffff;">{source_name}</strong>'
             f'<span class="gl-source-badge">Page {page}</span>'
             f'<span class="gl-source-badge">Section: {section}</span>'
             f'{effective_badge}</div>'
@@ -1396,19 +1401,40 @@ def render_history_card(turn):
     if sources:
         sources_html = (
             '<div class="gl-sources-box">'
-            '<div class="gl-sources-header">Supporting sources</div>'
+            '<div class="gl-sources-header">'
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00e599" stroke-width="2">'
+            '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>'
+            '<polyline points="14 2 14 8 20 8"></polyline>'
+            '</svg>'
+            '<span>Verified Supporting Sources</span>'
+            '</div>'
             f'{"".join(sources)}</div>'
         )
 
-    return f"""
+    return dedent(
+        f"""
         <div class="gl-answer-card">
             <div class="gl-user-message-row">
                 <div class="gl-user-bubble">{question}</div>
-                <div class="gl-user-avatar-icon" aria-hidden="true">●</div>
+                <div class="gl-user-avatar-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                </div>
             </div>
             <div class="gl-user-meta">{timestamp} &#10003;&#10003;</div>
             <div class="gl-bot-message-row">
-                <div class="gl-bot-avatar" aria-hidden="true">🌿</div>
+                <div class="gl-bot-avatar">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <rect x="3" y="6" width="18" height="14" rx="4" fill="rgba(0, 229, 153, 0.2)" stroke="#00e599" stroke-width="1.8"/>
+                        <circle cx="8.5" cy="12" r="1.5" fill="#00e599"/>
+                        <circle cx="15.5" cy="12" r="1.5" fill="#00e599"/>
+                        <path d="M9.5 15.5C10.5 16.5 13.5 16.5 14.5 15.5" stroke="#00e599" stroke-width="1.6" stroke-linecap="round"/>
+                        <path d="M12 2V6" stroke="#00e599" stroke-width="1.8" stroke-linecap="round"/>
+                        <circle cx="12" cy="2" r="1" fill="#00e599"/>
+                    </svg>
+                </div>
                 <div class="gl-bot-bubble">
                     <div class="gl-bot-title">Answer</div>
                     <div>{answer}</div>
@@ -1417,109 +1443,43 @@ def render_history_card(turn):
                 </div>
             </div>
         </div>
-    """
+        """
+    ).strip()
 
 
 # Unified conversation, quick-question, and composer card.
 with st.container(key="helpdesk-chat-experience"):
-    # Main Content Area: current answer or compact welcome message
-    history_to_render = st.session_state.conversation_history
-    if st.session_state.current_question and st.session_state.answer_result:
-        history_to_render = history_to_render[:-1]
+    history_to_render = list(st.session_state.conversation_history)
+    current_question = st.session_state.current_question
+    current_result = st.session_state.answer_result
+    if current_question and current_result:
+        current_turn = {
+            "question": current_question,
+            "answer_result": current_result,
+            "timestamp": st.session_state.timestamp or now_kolkata.strftime("%I:%M %p"),
+        }
+        current_turn_is_stored = (
+            bool(history_to_render)
+            and history_to_render[-1].get("question") == current_turn["question"]
+            and history_to_render[-1].get("answer_result") == current_turn["answer_result"]
+        )
+        if not current_turn_is_stored:
+            history_to_render.append(current_turn)
+
     history_markup = "".join(
-        render_history_card(previous_turn)
-        for previous_turn in history_to_render
+        render_history_card(turn)
+        for turn in history_to_render
     )
-
-    if st.session_state.current_question and st.session_state.answer_result:
-        result = st.session_state.answer_result
-        ts = st.session_state.timestamp or now_kolkata.strftime("%I:%M %p")
-
-        ans_text = result.get("answer", "")
-        formatted_ans = html.escape(ans_text).replace("\n", "<br>")
-        formatted_question = html.escape(st.session_state.current_question)
-
-        sources = result.get("sources", [])
-        sources_html = ""
-        if sources:
-            sources_items = []
-            for src in sources:
-                source_file = html.escape(str(src.get("source", "Unknown")))
-                sec = html.escape(str(src.get("section", "General")))
-                page_num = html.escape(str(src.get("page", 1)))
-                eff_date = src.get("effective_date")
-                eff_badge = (
-                    f'<span class="gl-source-badge">Effective: {html.escape(str(eff_date))}</span>'
-                    if eff_date
-                    else ""
-                )
-
-                sources_items.append(
-                    f'<div class="gl-source-item">'
-                    f'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00e599" stroke-width="2">'
-                    f'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>'
-                    f'<polyline points="14 2 14 8 20 8"></polyline>'
-                    f'</svg>'
-                    f'<strong style="color: #ffffff;">{source_file}</strong>'
-                    f'<span class="gl-source-badge">Page {page_num}</span>'
-                    f'<span class="gl-source-badge">Section: {sec}</span>'
-                    f'{eff_badge}'
-                    f'</div>'
-                )
-            sources_html = (
-                f'<div class="gl-sources-box">'
-                f'<div class="gl-sources-header">'
-                f'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00e599" stroke-width="2">'
-                f'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>'
-                f'<polyline points="14 2 14 8 20 8"></polyline>'
-                f'</svg>'
-                f'<span>Verified Supporting Sources</span>'
-                f'</div>'
-                f'{"".join(sources_items)}'
-                f'</div>'
-            )
-
-        history_markup += f"""
-            <div class="gl-answer-card">
-                <div class="gl-user-message-row">
-                    <div class="gl-user-bubble">
-                        {formatted_question}
-                    </div>
-                    <div class="gl-user-avatar-icon">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="12" cy="7" r="4"></circle>
-                        </svg>
-                    </div>
-                </div>
-                <div class="gl-user-meta">{ts} &#10003;&#10003;</div>
-                <div class="gl-bot-message-row">
-                    <div class="gl-bot-avatar">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                            <rect x="3" y="6" width="18" height="14" rx="4" fill="rgba(0, 229, 153, 0.2)" stroke="#00e599" stroke-width="1.8"/>
-                            <circle cx="8.5" cy="12" r="1.5" fill="#00e599"/>
-                            <circle cx="15.5" cy="12" r="1.5" fill="#00e599"/>
-                            <path d="M9.5 15.5C10.5 16.5 13.5 16.5 14.5 15.5" stroke="#00e599" stroke-width="1.6" stroke-linecap="round"/>
-                            <path d="M12 2V6" stroke="#00e599" stroke-width="1.8" stroke-linecap="round"/>
-                            <circle cx="12" cy="2" r="1" fill="#00e599"/>
-                        </svg>
-                    </div>
-                    <div class="gl-bot-bubble">
-                        <div class="gl-bot-title">Answer</div>
-                        <div>{formatted_ans}</div>
-                        <div class="gl-bot-timestamp">{ts}</div>{sources_html}
-                    </div>
-                </div>
-            </div>
+    if not history_to_render:
+        history_markup = dedent(
             """
-    elif not st.session_state.conversation_history:
-        history_markup += """
             <div class="gl-chat-welcome">
                 <strong>Welcome to GreenLeaf Helpdesk</strong>
                 <span>Ask about society rules, facilities, charges, notices or policies. Answers are grounded in GreenLeaf documents.</span>
             </div>
             """
-    else:
+        ).strip()
+    elif not current_question or not current_result:
         history_markup += (
             '<div class="gl-chat-welcome">'
             '<strong>Your conversation history is above.</strong>'

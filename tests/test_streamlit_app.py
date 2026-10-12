@@ -95,6 +95,8 @@ def test_quick_question_pool_timings(monkeypatch):
     ans = at.session_state.answer_result["answer"].lower()
     assert "6:00" in ans or "morning" in ans
     assert len(at.session_state.answer_result["sources"]) > 0
+    assert len(at.session_state.conversation_history) == 1
+    assert at.session_state.conversation_history[0]["question"] == at.session_state.current_question
     print("PASS: test_quick_question_pool_timings")
 
 
@@ -122,8 +124,9 @@ def test_custom_question_submit(monkeypatch):
     at = AppTest.from_file(APP_PATH, default_timeout=45)
     at.run()
 
+    question = "What are the gym timings?"
     text_input = at.text_input(key="chat_input_text")
-    text_input.input("What are the gym timings?")
+    text_input.input(question)
 
     submit_btn = [b for b in at.button if b.label == "➤"][0]
     submit_btn.click()
@@ -133,7 +136,54 @@ def test_custom_question_submit(monkeypatch):
     assert at.session_state.answer_result is not None
     ans = at.session_state.answer_result["answer"].lower()
     assert "5:30" in ans or "10:30" in ans
+    assert len(at.session_state.conversation_history) == 1
+    turn = at.session_state.conversation_history[0]
+    assert turn["question"] == question
+    assert turn["answer_result"]["answer"] == at.session_state.answer_result["answer"]
+    assert '<div class="gl-answer-card">' not in turn["question"]
+    assert '<div class="gl-answer-card">' not in turn["answer_result"]["answer"]
     print("PASS: test_custom_question_submit")
+
+
+def test_multiple_questions_render_once_without_html_messages(monkeypatch):
+    monkeypatch.setattr("src.answer.answer_question", mock_answer_question)
+    at = AppTest.from_file(APP_PATH, default_timeout=45)
+    at.run()
+
+    questions = [
+        "What are the swimming pool timings?",
+        "What are the gym timings?",
+    ]
+    for question in questions:
+        at.text_input(key="chat_input_text").input(question)
+        next(button for button in at.button if button.label == "➤").click()
+        at.run()
+        assert not at.exception
+
+    history = at.session_state.conversation_history
+    assert [turn["question"] for turn in history] == questions
+    assert all(
+        '<div class="gl-answer-card">' not in turn["question"]
+        and '<div class="gl-answer-card">' not in turn["answer_result"]["answer"]
+        for turn in history
+    )
+
+    conversation_markup = next(
+        item.value
+        for item in at.markdown
+        if '<div class="gl-conversation-history">' in item.value
+    )
+    assert all(conversation_markup.count(question) == 1 for question in questions)
+    assert all(
+        conversation_markup.count(turn["answer_result"]["answer"]) == 1
+        for turn in history
+    )
+
+    import markdown_it
+
+    rendered = markdown_it.MarkdownIt().render(conversation_markup)
+    assert "<pre>" not in rendered
+    assert "<code>" not in rendered
 
 
 def test_supporting_sources_rendered_as_html_cards():
