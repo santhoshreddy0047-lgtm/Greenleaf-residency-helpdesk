@@ -326,6 +326,144 @@ def test_maintenance_answer_uses_newer_evidence_and_citations(monkeypatch):
     assert "[Source" not in result["answer"]
 
 
+def test_current_share_market_price_is_not_inferred_from_bylaw_value(monkeypatch):
+    retrieved = [
+        SimpleNamespace(
+            score=0.72,
+            payload={
+                "text": (
+                    "The face value of each share is Rs 50 as specified "
+                    "in the society bye-laws."
+                ),
+                "source": "Society_Byelaws.pdf",
+                "page": 12,
+                "section": "Share Capital",
+                "effective_date": None,
+            },
+        )
+    ]
+
+    class UnexpectedGroq:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError(
+                "A fixed bye-law share value must not be reported as market price."
+            )
+
+    monkeypatch.setattr(answer, "retrieve_documents", lambda question: retrieved)
+    monkeypatch.setattr(answer, "Groq", UnexpectedGroq)
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+
+    result = answer.answer_question(
+        "What is the current share price of GreenLeaf Residency?"
+    )
+
+    assert "do not establish a current market price" in result["answer"].lower()
+    assert "₹50" not in result["answer"]
+    assert result["sources"] == [
+        {
+            "source": "Society_Byelaws.pdf",
+            "page": 12,
+            "section": "Share Capital",
+            "effective_date": None,
+        }
+    ]
+
+
+def test_bylaw_share_value_question_returns_documented_value(monkeypatch):
+    retrieved = [
+        SimpleNamespace(
+            score=0.72,
+            payload={
+                "text": (
+                    "The face value of each share is Rs 50 as specified "
+                    "in the society bye-laws."
+                ),
+                "source": "Society_Byelaws.pdf",
+                "page": 12,
+                "section": "Share Capital",
+                "effective_date": None,
+            },
+        )
+    ]
+    groq_calls = []
+
+    class FakeGroq:
+        def __init__(self, api_key):
+            pass
+
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kwargs):
+                    groq_calls.append(kwargs)
+                    return SimpleNamespace(
+                        choices=[
+                            SimpleNamespace(
+                                message=SimpleNamespace(
+                                    content="The bye-laws state a share face value of Rs 50."
+                                )
+                            )
+                        ]
+                    )
+
+    monkeypatch.setattr(answer, "retrieve_documents", lambda question: retrieved)
+    monkeypatch.setattr(answer, "Groq", FakeGroq)
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+
+    result = answer.answer_question(
+        "What is the share value mentioned in the society bye-laws?"
+    )
+
+    assert len(groq_calls) == 1
+    assert "50" in result["answer"]
+    assert "face value" in result["answer"].lower()
+    assert result["sources"][0]["source"] == "Society_Byelaws.pdf"
+
+
+def test_facility_answer_still_uses_retrieved_evidence(monkeypatch):
+    retrieved = [
+        SimpleNamespace(
+            score=0.72,
+            payload={
+                "text": "The swimming pool is open from 6:00 AM to 9:00 PM.",
+                "source": "Facilities_Guide.pdf",
+                "page": 4,
+                "section": "Swimming Pool",
+                "effective_date": None,
+            },
+        )
+    ]
+
+    class FakeGroq:
+        def __init__(self, api_key):
+            pass
+
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kwargs):
+                    return SimpleNamespace(
+                        choices=[
+                            SimpleNamespace(
+                                message=SimpleNamespace(
+                                    content="The pool is open from 6:00 AM to 9:00 PM."
+                                )
+                            )
+                        ]
+                    )
+
+    monkeypatch.setattr(answer, "retrieve_documents", lambda question: retrieved)
+    monkeypatch.setattr(answer, "Groq", FakeGroq)
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+
+    result = answer.answer_question(
+        "What are the swimming pool timings?"
+    )
+
+    assert "6:00 AM to 9:00 PM" in result["answer"]
+    assert result["sources"][0]["source"] == "Facilities_Guide.pdf"
+
+
 def test_masks_pii_in_question_context_and_generated_answer_before_groq(
     monkeypatch,
 ):
