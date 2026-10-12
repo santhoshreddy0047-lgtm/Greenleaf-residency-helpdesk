@@ -4,6 +4,34 @@ from streamlit.testing.v1 import AppTest
 APP_PATH = str(Path(__file__).resolve().parent.parent / "app.py")
 
 
+def mock_answer_question(question):
+    lowered_question = question.lower()
+    if "pool" in lowered_question:
+        answer_text = "The swimming pool is open from 6:00 AM to 9:00 PM."
+        source = "Facilities_Guide.md"
+    elif "maintenance" in lowered_question:
+        answer_text = (
+            "The revised 2BHK monthly maintenance is ₹2,800 from "
+            "1 April 2026; the newer notice applies."
+        )
+        source = "Notice_2026-02-20_Maintenance_Revision.docx"
+    else:
+        answer_text = "The gym is open from 5:30 AM to 10:30 PM."
+        source = "Facilities_Guide.md"
+
+    return {
+        "answer": answer_text,
+        "sources": [
+            {
+                "source": source,
+                "page": 1,
+                "section": "Facilities",
+                "effective_date": "2026-04-01",
+            }
+        ],
+    }
+
+
 def test_initial_render():
     """Validates that app.py loads cleanly without any runtime exception."""
     at = AppTest.from_file(APP_PATH, default_timeout=35)
@@ -50,8 +78,9 @@ def test_new_question_clears_answer():
     print("PASS: test_new_question_clears_answer")
 
 
-def test_quick_question_pool_timings():
+def test_quick_question_pool_timings(monkeypatch):
     """Validates that clicking the 'Pool timings' chip triggers the query."""
+    monkeypatch.setattr("src.answer.answer_question", mock_answer_question)
     at = AppTest.from_file(APP_PATH, default_timeout=45)
     at.run()
 
@@ -69,8 +98,9 @@ def test_quick_question_pool_timings():
     print("PASS: test_quick_question_pool_timings")
 
 
-def test_quick_question_maintenance():
+def test_quick_question_maintenance(monkeypatch):
     """Validates that clicking the 'Maintenance' chip returns the revised 2,800 charge."""
+    monkeypatch.setattr("src.answer.answer_question", mock_answer_question)
     at = AppTest.from_file(APP_PATH, default_timeout=45)
     at.run()
 
@@ -86,8 +116,9 @@ def test_quick_question_maintenance():
     print("PASS: test_quick_question_maintenance (returns 2,800)")
 
 
-def test_custom_question_submit():
+def test_custom_question_submit(monkeypatch):
     """Validates that typing a custom question and submitting executes RAG pipeline."""
+    monkeypatch.setattr("src.answer.answer_question", mock_answer_question)
     at = AppTest.from_file(APP_PATH, default_timeout=45)
     at.run()
 
@@ -145,6 +176,41 @@ def test_supporting_sources_rendered_as_html_cards():
     assert "<code>" not in rendered, "Supporting sources should not be wrapped in <code> code blocks"
     assert '<div class="gl-source-item">' in rendered
     print("PASS: test_supporting_sources_rendered_as_html_cards")
+
+
+def test_question_and_answer_html_are_escaped():
+    at = AppTest.from_file(APP_PATH, default_timeout=35)
+    at.session_state.current_question = '<img src=x onerror="alert(1)">'
+    at.session_state.answer_result = {
+        "answer": '<script>alert("answer")</script>',
+        "sources": [],
+    }
+    at.run()
+
+    assert not at.exception
+    answer_card_md = next(
+        m.value for m in at.markdown if '<div class="gl-answer-card">' in m.value
+    )
+    assert '<img src=x onerror="alert(1)">' not in answer_card_md
+    assert "&lt;img" in answer_card_md
+    assert '<script>alert("answer")</script>' not in answer_card_md
+    assert "&lt;script&gt;" in answer_card_md
+
+
+def test_qdrant_status_failure_is_reported_as_unavailable(monkeypatch):
+    def fail_to_create_client():
+        raise RuntimeError("private error details")
+
+    monkeypatch.setattr("src.build_index.create_client", fail_to_create_client)
+    at = AppTest.from_file(APP_PATH, default_timeout=35)
+    at.run()
+
+    assert not at.exception
+    assert any(
+        "Knowledge base status unavailable (RuntimeError)" in item.value
+        for item in at.markdown
+    )
+    assert all("private error details" not in item.value for item in at.markdown)
 
 
 if __name__ == "__main__":

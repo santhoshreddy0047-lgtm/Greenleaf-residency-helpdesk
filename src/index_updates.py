@@ -109,10 +109,9 @@ def load_update_documents():
             )
 
         except Exception as error:
-
             print(
-                f"Failed to load update "
-                f"{file_path.name}: {error}"
+                f"Failed to load update {file_path.name} "
+                f"({type(error).__name__})."
             )
 
     return documents

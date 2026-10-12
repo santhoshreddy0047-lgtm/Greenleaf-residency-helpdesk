@@ -7,5 +7,7 @@ qdrant-client
 pypdf
 python-docx
 groq
-sentence-transformers
+fastembed
+onnxruntime
 docx2txt
+pytest

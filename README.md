@@ -12,7 +12,7 @@ The application retrieves relevant document chunks, generates answers using the 
 
 - PDF, DOCX, Markdown, and TXT document ingestion
 - Text cleaning and sensitive-data masking
-- Semantic search using Sentence Transformers
+- Semantic search using FastEmbed and ONNX Runtime
 - Local vector storage using Qdrant
 - AI-powered answers using Groq
 - Source attribution with document metadata
@@ -29,7 +29,7 @@ The application retrieves relevant document chunks, generates answers using the 
 | User interface | Streamlit |
 | RAG framework | LangChain |
 | Vector database | Qdrant |
-| Embedding model | Sentence Transformers |
+| Embedding model | FastEmbed (`sentence-transformers/all-MiniLM-L6-v2`) |
 | Language model API | Groq |
 | Document processing | PyPDF, Docx2txt |
 | Testing | pytest, Streamlit AppTest |
@@ -63,7 +63,7 @@ greenleaf-residency-helpdesk/
 
 ## Prerequisites
 
-- Python 3.11 or another Python version compatible with the dependencies
+- Python 3.12
 - A Groq API key
 - Internet access for initial model downloads and Groq API calls
 
@@ -129,16 +129,10 @@ Open the local address printed by Streamlit in your browser.
 
 ## Run Tests
 
-Run the RAG tests:
+Run the mocked RAG and Streamlit tests:
 
 ```powershell
-python -m tests.test_rag
-```
-
-Run the Streamlit UI tests:
-
-```powershell
-python -m pytest tests/test_streamlit_app.py -v
+python -m pytest tests/test_rag.py tests/test_streamlit_app.py -v
 ```
 
 ## Results

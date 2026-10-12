@@ -4,6 +4,7 @@ from datetime import date
 
 from groq import Groq
 
+from src.clean_text import mask_sensitive_data
 from src.retrieve import retrieve_documents
 
 
@@ -30,7 +31,7 @@ def build_context(results):
         page = payload.get("page", 1)
         section = payload.get("section", "General")
         effective_date = payload.get("effective_date", "Unknown")
-        text = payload.get("text", "")
+        text, _ = mask_sensitive_data(payload.get("text", ""))
 
         context_parts.append(
             f"""
@@ -105,10 +106,11 @@ Rules:
 10. The application will display the sources separately.
 """
 
+    safe_question, _ = mask_sensitive_data(question)
     user_prompt = f"""
 Question:
 
-{question}
+{safe_question}
 
 Retrieved GreenLeaf Residency documents:
 
@@ -135,6 +137,7 @@ Do not include source labels or citations in your answer.
     )
 
     answer = response.choices[0].message.content.strip()
+    answer, _ = mask_sensitive_data(answer)
     answer = re.sub(
         r"(?<=\d)[\u00a0\u202f\u2009](?=\d{3}\b)",
         ",",

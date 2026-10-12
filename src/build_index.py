@@ -9,15 +9,19 @@ from qdrant_client.models import (
     PointStruct,
     VectorParams,
 )
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 
 from src.chunk_text import chunk_documents
 from src.config import QDRANT_DATA_DIR
-from src.load_documents import load_documents
+from src.load_documents import EXCLUDED_RAW_DOCUMENT, load_documents
 
 
 COLLECTION_NAME = "greenleaf_residency"
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_DIMENSION = 384
+EMBEDDING_FAILURE_MESSAGE = (
+    "Embedding generation failed; existing indexed chunks were retained."
+)
 
 
 def create_client():
@@ -79,33 +83,54 @@ def create_point_id(document, index):
     )
 
 
-def delete_source_chunks(client, source):
+def get_source_point_ids(client, source):
+    point_ids = set()
+    offset = None
 
-    try:
-
-        client.delete(
+    while True:
+        records, offset = client.scroll(
             collection_name=COLLECTION_NAME,
-            points_selector=Filter(
+            scroll_filter=Filter(
                 must=[
                     FieldCondition(
                         key="source",
-                        match=MatchValue(
-                            value=source
-                        ),
+                        match=MatchValue(value=source),
                     )
                 ]
             ),
+            limit=256,
+            offset=offset,
+            with_payload=False,
+        )
+        point_ids.update(record.id for record in records)
+        if offset is None:
+            break
+
+    return point_ids
+
+
+def delete_source_chunks(client, source):
+    point_ids = get_source_point_ids(client, source)
+    if point_ids:
+        client.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector=list(point_ids),
         )
 
-        print(
-            f"Deleted existing chunks for: {source}"
-        )
 
-    except Exception as error:
+def replace_source_chunks(client, source, points):
+    existing_ids = get_source_point_ids(client, source)
 
-        print(
-            f"Could not delete existing chunks for "
-            f"{source}: {error}"
+    client.upsert(
+        collection_name=COLLECTION_NAME,
+        points=points,
+    )
+
+    stale_ids = existing_ids - {point.id for point in points}
+    if stale_ids:
+        client.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector=list(stale_ids),
         )
 
 
@@ -128,10 +153,6 @@ def index_documents(documents):
     print()
     print("Loading embedding model...")
 
-    model = SentenceTransformer(
-        EMBEDDING_MODEL
-    )
-
     texts = [
         chunk.page_content
         for chunk in chunks
@@ -140,110 +161,71 @@ def index_documents(documents):
     print()
     print("Creating embeddings...")
 
-    embeddings = model.encode(
-        texts,
-        normalize_embeddings=True,
-        show_progress_bar=True,
-    )
+    try:
+        model = TextEmbedding(model_name=EMBEDDING_MODEL)
+        embeddings = [
+            [float(value) for value in embedding]
+            for embedding in model.embed(texts)
+        ]
+        if (
+            len(embeddings) != len(chunks)
+            or any(
+                len(embedding) != EMBEDDING_DIMENSION
+                for embedding in embeddings
+            )
+        ):
+            raise ValueError("Unexpected embedding count or dimensions.")
+    except Exception:
+        print(EMBEDDING_FAILURE_MESSAGE)
+        raise RuntimeError(EMBEDDING_FAILURE_MESSAGE) from None
 
-    vector_size = len(
-        embeddings[0]
-    )
+    points_by_source = {}
+    source_indices = {}
 
-    client = create_client()
-
-    create_collection(
-        client,
-        vector_size
-    )
-
-    sources = {
-        chunk.metadata.get(
-            "source",
-            "unknown"
-        )
-        for chunk in chunks
-    }
-
-    print()
-
-    for source in sources:
-
-        delete_source_chunks(
-            client,
-            source
-        )
-
-    print()
-    print("Preparing Qdrant points...")
-
-    points = []
-
-    for index, (chunk, embedding) in enumerate(
-        zip(chunks, embeddings)
-    ):
-
-        point_id = create_point_id(
-            chunk,
-            index
-        )
+    for chunk, embedding in zip(chunks, embeddings):
+        source = chunk.metadata.get("source", "unknown")
+        source_index = source_indices.get(source, 0)
+        source_indices[source] = source_index + 1
 
         payload = {
             "text": chunk.page_content,
-            "source": chunk.metadata.get(
-                "source",
-                "unknown"
-            ),
-            "page": chunk.metadata.get(
-                "page",
-                1
-            ),
-            "section": chunk.metadata.get(
-                "section",
-                "General"
-            ),
-            "effective_date": chunk.metadata.get(
-                "effective_date"
-            ),
+            "source": source,
+            "page": chunk.metadata.get("page", 1),
+            "section": chunk.metadata.get("section", "General"),
+            "effective_date": chunk.metadata.get("effective_date"),
         }
-
-        points.append(
+        points_by_source.setdefault(source, []).append(
             PointStruct(
-                id=point_id,
-                vector=embedding.tolist(),
+                id=create_point_id(chunk, source_index),
+                vector=embedding,
                 payload=payload,
             )
         )
 
-    print(
-        f"Uploading {len(points)} chunks to Qdrant..."
-    )
+    client = create_client()
 
-    client.upsert(
-        collection_name=COLLECTION_NAME,
-        points=points,
-    )
+    try:
+        create_collection(client, EMBEDDING_DIMENSION)
 
-    collection_info = client.get_collection(
-        COLLECTION_NAME
-    )
+        total_points = sum(
+            len(points) for points in points_by_source.values()
+        )
+        print(f"Uploading {total_points} chunks to Qdrant...")
 
-    print()
-    print("=" * 60)
-    print("QDRANT INDEXING COMPLETED")
-    print("=" * 60)
+        for source, points in points_by_source.items():
+            replace_source_chunks(client, source, points)
 
-    print(
-        f"Collection : {COLLECTION_NAME}"
-    )
+        collection_info = client.get_collection(COLLECTION_NAME)
 
-    print(
-        f"Points     : {collection_info.points_count}"
-    )
-
-    print("=" * 60)
-
-    client.close()
+        print()
+        print("=" * 60)
+        print("QDRANT INDEXING COMPLETED")
+        print("=" * 60)
+        print(f"Collection : {COLLECTION_NAME}")
+        print(f"Points     : {collection_info.points_count}")
+        print("=" * 60)
+    finally:
+        client.close()
 
 
 def build_index():
@@ -260,6 +242,20 @@ def build_index():
     print()
 
     index_documents(documents)
+
+    if not documents:
+        return
+
+    client = create_client()
+    try:
+        collection_names = {
+            collection.name
+            for collection in client.get_collections().collections
+        }
+        if COLLECTION_NAME in collection_names:
+            delete_source_chunks(client, EXCLUDED_RAW_DOCUMENT)
+    finally:
+        client.close()
 
 
 if __name__ == "__main__":

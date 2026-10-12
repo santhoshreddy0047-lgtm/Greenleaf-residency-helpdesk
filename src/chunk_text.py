@@ -180,12 +180,3 @@ if __name__ == "__main__":
     print(f"Document parts: {len(documents)}")
     print(f"Chunks created: {len(chunks)}")
     print("=" * 50)
-
-    if chunks:
-        print()
-        print("Sample chunk:")
-        print("-" * 50)
-        print(chunks[0].page_content[:500])
-        print("-" * 50)
-        print("Metadata:")
-        print(chunks[0].metadata)

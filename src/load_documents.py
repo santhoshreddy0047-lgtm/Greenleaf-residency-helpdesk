@@ -8,11 +8,17 @@ from src.config import RAW_DATA_DIR
 from src.clean_text import clean_text, mask_sensitive_data
 
 
+EXCLUDED_RAW_DOCUMENT = "GreenLeaf_Residency_Helpdesk_RAG_Project (1).pdf"
+
+
 def load_documents():
     documents = []
 
     for file_path in sorted(RAW_DATA_DIR.iterdir()):
         if not file_path.is_file():
+            continue
+
+        if file_path.name == EXCLUDED_RAW_DOCUMENT:
             continue
 
         extension = file_path.suffix.lower()
@@ -76,7 +82,10 @@ def load_documents():
             print(f"  Privacy: {file_counts}")
 
         except Exception as error:
-            print(f"Failed to load {file_path.name}: {error}")
+            print(
+                f"Failed to load {file_path.name} "
+                f"({type(error).__name__})."
+            )
 
     return documents
 
